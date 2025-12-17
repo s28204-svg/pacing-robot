@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>無情配速機器人 V4.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;600&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { 'race-red': '#DC2626', 'race-dark': '#111827', 'race-gray': '#F3F4F6' },
+                    fontFamily: { 'display': ['Teko', 'sans-serif'], 'body': ['Noto Sans TC', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .num-font { font-family: 'Teko', sans-serif; }
+        .tab-active { color: #DC2626; border-bottom: 2px solid #DC2626; }
+        .tab-inactive { color: #6B7280; }
+        select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg'%3E"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem; }
+        .watermark { position: absolute; right: -20px; bottom: -20px; font-size: 8rem; color: rgba(220, 38, 38, 0.05); transform: rotate(-15deg); pointer-events: none; z-index: 0; }
+        .watermark-dark { color: rgba(17, 24, 39, 0.05); }
+        .weather-row { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 流暢線條背景 */
+        .flowing-track-bg {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background-color: #0d121c;
+            opacity: 0.95; 
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='p' width='10' height='10' patternUnits='userSpaceOnUse'%3E%3Cpath d='M-1 1l2 -2M0 10l10 -10M9 11l2 -2' stroke='%23334155' stroke-width='1' stroke-opacity='0.5' /%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23p)' /%3E%3C/svg%3E");
+            filter: brightness(0.9);
+        }
+        .content-card {
+            background-color: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+        }
+        main { position: relative; z-index: 10; }
+    </style>
+</head>
+<body class="pb-24">
+
+    <div class="flowing-track-bg"></div>
+
+    <header class="bg-race-red text-white p-4 sticky top-0 z-50 shadow-md flex justify-between items-center relative">
+        <div class="flex items-center gap-2">
+            <i class="fas fa-robot text-xl"></i>
+            <h1 class="text-2xl font-bold italic tracking-wider">無情配速機器人</h1>
+        </div>
+        <span class="text-xs bg-black/20 px-2 py-1 rounded font-bold">V4.0</span>
+    </header>
+
+    <main class="p-4 max-w-md mx-auto space-y-4">
+        
+        <section id="page-calc" class="space-y-4">
+            <div class="flex bg-white/95 backdrop-blur-sm rounded-lg p-1 shadow-md border border-gray-200">
+                <button onclick="switchMode('general')" id="btn-general" class="flex-1 py-2 text-sm font-bold rounded-md bg-race-red text-white transition">一般配速</button>
+                <button onclick="switchMode('strategy')" id="btn-strategy" class="flex-1 py-2 text-sm font-bold rounded-md text-gray-500 transition">分段策略</button>
+            </div>
+
+            <div id="content-general" class="content-card p-5 rounded-xl shadow-lg border-t-4 border-race-red relative overflow-hidden">
+                <div class="watermark"><i class="fas fa-stopwatch"></i></div>
+                <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2 relative z-10"><i class="fas fa-calculator text-race-red"></i> 目標配速</h3>
+                <div class="flex gap-2 mb-6 relative z-10">
+                    <select id="pace-min" class="pace-selector flex-1 p-3 bg-gray-100 rounded-lg text-xl font-bold text-center outline-none border border-gray-200"></select>
+                    <span class="self-center font-bold text-gray-400 text-xl">:</span>
+                    <select id="pace-sec" class="pace-selector flex-1 p-3 bg-gray-100 rounded-lg text-xl font-bold text-center outline-none border border-gray-200"></select>
+                    <span class="self-center text-sm text-gray-500 font-bold">/km</span>
+                </div>
+                <div class="grid grid-cols-2 gap-4 text-center relative z-10">
+                    <div class="bg-gray-50/90 p-4 rounded-lg border border-gray-200 backdrop-blur-sm">
+                        <p class="text-xs font-bold text-gray-500 mb-1 uppercase">半馬 (21.1K)</p>
+                        <p id="time-half" class="text-3xl font-bold text-race-dark num-font tracking-wide">--:--:--</p>
+                    </div>
+                    <div class="bg-red-50/90 p-4 rounded-lg border border-red-100 backdrop-blur-sm">
+                        <p class="text-xs font-bold text-race-red mb-1 uppercase">全馬 (42.2K)</p>
+                        <p id="time-full" class="text-3xl font-bold text-race-red num-font tracking-wide">--:--:--</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="content-strategy" class="content-card p-5 rounded-xl shadow-lg border-t-4 border-gray-800 hidden relative overflow-hidden">
+                <div class="watermark watermark-dark"><i class="fas fa-route"></i></div>
+                <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2 relative z-10"><i class="fas fa-chess-knight text-gray-700"></i> 分段策略</h3>
+                <div class="space-y-4 relative z-10">
+                    <div>
+                        <label class="text-xs font-bold text-gray-700 block mb-1">目標賽事距離</label>
+                        <select id="strat-dist-type" class="w-full p-3 bg-gray-100 border border-gray-200 rounded-lg font-bold text-race-dark" onchange="updateStratRem()">
+                            <option value="42.195">全程馬拉松 (42.195 km)</option>
+                            <option value="21.0975">半程馬拉松 (21.0975 km)</option>
+                        </select>
+                    </div>
+                    <div class="bg-gray-50/90 p-3 rounded-lg border border-gray-200 relative backdrop-blur-sm">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-bold text-gray-500">前段距離 (km)</label>
+                            <input type="number" id="strat-dist-1" value="30" class="w-20 p-1 bg-white border border-gray-300 rounded text-center font-bold outline-none" oninput="updateStratRem()">
+                        </div>
+                        <div class="flex gap-1 items-center">
+                            <label class="text-xs font-bold text-gray-500 mr-2">配速</label>
+                            <select id="strat-p1-min" class="pace-selector flex-1 p-2 bg-white border border-gray-300 rounded text-center font-bold"></select>
+                            <span class="font-bold">:</span>
+                            <select id="strat-p1-sec" class="pace-selector flex-1 p-2 bg-white border border-gray-300 rounded text-center font-bold"></select>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50/90 p-3 rounded-lg border border-gray-200 relative mt-4 backdrop-blur-sm">
+                        <div class="flex justify-between items-center mb-2">
+                             <label class="text-xs font-bold text-gray-500">剩餘距離 (km)</label>
+                             <span id="strat-dist-rem" class="font-bold text-gray-700">--</span>
+                        </div>
+                        <div class="flex gap-1 items-center">
+                             <label class="text-xs font-bold text-gray-500 mr-2">配速</label>
+                            <select id="strat-p2-min" class="pace-selector flex-1 p-2 bg-white border border-gray-300 rounded text-center font-bold"></select>
+                            <span class="font-bold">:</span>
+                            <select id="strat-p2-sec" class="pace-selector flex-1 p-2 bg-white border border-gray-300 rounded text-center font-bold"></select>
+                        </div>
+                    </div>
+                    <div class="pt-2">
+                        <div class="flex justify-between items-center bg-race-red p-4 rounded-lg text-white shadow-md">
+                            <span class="text-sm font-bold">完賽時間</span>
+                            <span id="strat-total-time" class="text-3xl font-bold num-font tracking-wider">--:--:--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-predict" class="hidden space-y-4">
+            <div class="content-card p-5 rounded-xl shadow-lg border-t-4 border-blue-600 relative overflow-hidden">
+                <div class="watermark text-blue-50"><i class="fas fa-trophy"></i></div>
+                <h2 class="text-xl font-bold mb-4 text-race-dark flex items-center gap-2 relative z-10"><i class="fas fa-chart-line text-blue-600"></i> VDOT 完賽預測</h2>
+                <div class="space-y-3 mb-6 relative z-10">
+                    <div>
+                        <label class="text-xs font-bold text-gray-700 block mb-1">最近比賽距離</label>
+                        <select id="pred-dist-type" class="w-full p-3 bg-gray-100 border border-gray-200 rounded-lg font-bold text-race-dark">
+                            <option value="5k">5 公里</option>
+                            <option value="10k" selected>10 公里</option>
+                            <option value="hm">半程馬拉松</option>
+                            <option value="fm">全程馬拉松</option>
+                        </select>
+                    </div>
+                    <div>
+                         <label class="text-xs font-bold text-gray-700 block mb-1">完成時間</label>
+                         <div class="flex gap-1">
+                            <select id="pred-h" class="time-selector flex-1 p-2 bg-gray-100 border border-gray-200 rounded text-center font-bold"></select> :
+                            <select id="pred-m" class="time-selector flex-1 p-2 bg-gray-100 border border-gray-200 rounded text-center font-bold"></select> :
+                            <select id="pred-s" class="time-selector flex-1 p-2 bg-gray-100 border border-gray-200 rounded text-center font-bold"></select>
+                         </div>
+                    </div>
+                </div>
+                <button onclick="calcVDOTPrediction()" class="relative z-10 w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold shadow-md">計算預測成績</button>
+                <div id="pred-result" class="mt-6 hidden relative z-10">
+                    <div class="flex justify-between items-end mb-2 border-b pb-2">
+                         <h3 class="text-sm font-bold text-gray-700">預測結果</h3>
+                         <span class="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-full" id="vdot-score">VDOT: --</span>
+                    </div>
+                    <div class="space-y-2">
+                         <div class="flex justify-between items-center bg-white/90 p-2 rounded border border-gray-100 shadow-sm" id="pred-row-5k">
+                            <span class="font-bold text-gray-600 text-xs w-10">5K</span>
+                            <div class="text-right">
+                                <span class="text-lg font-bold num-font pred-time mr-2">--:--:--</span>
+                                <span class="text-[10px] text-gray-400 pred-pace">@--:--</span>
+                            </div>
+                        </div>
+                         <div class="flex justify-between items-center bg-white/90 p-2 rounded border border-gray-100 shadow-sm" id="pred-row-10k">
+                            <span class="font-bold text-gray-600 text-xs w-10">10K</span>
+                            <div class="text-right">
+                                <span class="text-lg font-bold num-font pred-time mr-2">--:--:--</span>
+                                <span class="text-[10px] text-gray-400 pred-pace">@--:--</span>
+                            </div>
+                        </div>
+                         <div class="flex justify-between items-center bg-blue-50/90 p-2 rounded border border-blue-100 shadow-sm" id="pred-row-hm">
+                            <span class="font-bold text-blue-800 text-xs w-10">半馬</span>
+                            <div class="text-right">
+                                <span class="text-xl font-bold num-font text-blue-700 pred-time mr-2">--:--:--</span>
+                                <span class="text-xs text-blue-400 pred-pace">@--:--</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center bg-red-50/90 p-2 rounded border border-red-100 shadow-sm" id="pred-row-fm">
+                            <span class="font-bold text-race-red text-xs w-10">全馬</span>
+                            <div class="text-right">
+                                <span class="text-2xl font-bold num-font text-race-red pred-time mr-2">--:--:--</span>
+                                <span class="text-xs text-red-400 pred-pace">@--:--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="page-train" class="hidden space-y-4">
+            <div class="content-card p-5 rounded-xl shadow-lg border-t-4 border-green-600 relative overflow-hidden">
+                 <div class="watermark text-green-50"><i class="fas fa-dumbbell"></i></div>
+                <h2 class="text-xl font-bold mb-4 text-race-dark flex items-center gap-2 relative z-10"><i class="fas fa-dumbbell text-green-600"></i> VDOT 訓練配速</h2>
+                <div class="space-y-3 mb-6 relative z-10">
+                    <div>
+                        <label class="text-xs font-bold text-gray-700 block mb-1">目標距離</label>
+                        <select id="train-dist-type" class="w-full p-3 bg-gray-100 border border-gray-200 rounded-lg font-bold text-race-dark">
+                            <option value="5k" selected>5 公里</option>
+                            <option value="10k">10 公里</option>
+                            <option value="hm">半程馬拉松</option>
+                            <option value="fm">全程馬拉松</option>
+                        </select>
+                    </div>
+                    <div>
+                         <label class="text-xs font-bold text-gray-700 block mb-1">預計完成時間</label>
+                         <div class="flex gap-1">
+                            <select id="train-h" class="time-selector flex-1 p-2 bg-gray-100 border border-gray-200 rounded text-center font-bold"></select> :
+                            <select id="train-m" class="time-selector flex-1 p-2 bg-gray-100 border border-gray-200 rounded text-center font-bold"></select> :
+                            <select id="train-s" class="time-selector flex-1 p-2 bg-gray-100 border border-gray-200 rounded text-center font-bold"></select>
+                         </div>
+                    </div>
+                </div>
+                <button onclick="calcVDOTTrainingPace()" class="relative z-10 w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow-md">計算訓練配速</button>
+                <div id="train-result" class="mt-6 hidden relative z-10">
+                    <div class="flex justify-between items-end mb-2 border-b pb-2">
+                         <h3 class="text-sm font-bold text-gray-700">訓練配速表</h3>
+                         <span class="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full" id="vdot-train-score">VDOT: --</span>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 overflow-hidden relative z-10 bg-white/95">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-white uppercase bg-green-700">
+                                <tr>
+                                    <th scope="col" class="px-3 py-2 text-center">距離</th>
+                                    <th scope="col" class="px-3 py-2 text-center">R-Pace (400m)</th>
+                                    <th scope="col" class="px-3 py-2 text-center">I-Pace (Rep/Int)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vdot-train-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-track" class="hidden space-y-4">
+             <div class="flex bg-white/95 backdrop-blur-sm rounded-lg p-1 shadow-sm border border-gray-200">
+                <button onclick="switchTrackMode('paceToSec')" id="btn-track-p2s" class="flex-1 py-2 text-sm font-bold rounded-md bg-race-red text-white transition">配速 → 秒數</button>
+                <button onclick="switchTrackMode('secToPace')" id="btn-track-s2p" class="flex-1 py-2 text-sm font-bold rounded-md text-gray-500 transition">秒數 → 配速</button>
+            </div>
+            <div id="track-p2s-content" class="content-card p-5 rounded-xl shadow-lg border-t-4 border-race-red relative overflow-hidden">
+                <div class="watermark text-gray-100"><i class="fas fa-road"></i></div>
+                <h3 class="font-bold text-gray-800 mb-3 flex items-center relative z-10"><i class="fas fa-stopwatch-20 text-race-red mr-2"></i> 400m 各道次秒數</h3>
+                <label class="text-xs text-gray-500 font-bold block mb-2 relative z-10">目標配速 (可自由調整)</label>
+                <div class="flex gap-2 mb-4 relative z-10">
+                     <select id="track-pace-min" class="pace-selector flex-1 p-3 bg-gray-100 rounded-lg text-xl font-bold text-center outline-none focus:ring-2 focus:ring-race-red border border-gray-200"></select>
+                    <span class="self-center font-bold text-gray-400">:</span>
+                    <select id="track-pace-sec" class="pace-selector flex-1 p-3 bg-gray-100 rounded-lg text-xl font-bold text-center outline-none focus:ring-2 focus:ring-race-red border border-gray-200"></select>
+                </div>
+                <div class="rounded-lg border border-gray-200 overflow-hidden relative z-10 bg-white/95">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-white uppercase bg-race-dark">
+                            <tr>
+                                <th scope="col" class="px-3 py-2 text-center">道次</th>
+                                <th scope="col" class="px-3 py-2 text-center text-gray-400">距離 (M)</th>
+                                <th scope="col" class="px-3 py-2 text-right text-yellow-400">應跑秒數</th>
+                            </tr>
+                        </thead>
+                        <tbody id="track-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="track-s2p-content" class="content-card p-5 rounded-xl shadow-lg border-t-4 border-race-red hidden relative overflow-hidden">
+                <div class="watermark text-gray-100"><i class="fas fa-tachometer-alt"></i></div>
+                <h3 class="font-bold text-lg mb-4 text-center relative z-10">第一道秒數反推配速</h3>
+                <div class="flex justify-center items-center gap-2 mb-6 relative z-10">
+                    <input type="number" id="track-lap-sec" placeholder="96" class="w-24 p-3 bg-gray-50 border-2 border-race-red rounded-lg text-center font-bold text-3xl outline-none num-font text-race-dark" oninput="calcTrackSecToPace()">
+                    <span class="text-sm font-bold text-gray-500">秒 / 圈</span>
+                </div>
+                <div class="bg-race-dark text-white p-6 rounded-xl text-center shadow-md relative z-10">
+                    <p class="text-xs text-gray-400 mb-2 uppercase tracking-widest">等於配速</p>
+                    <p id="track-res-pace" class="text-5xl font-bold num-font tracking-widest text-race-red">--:--</p>
+                    <p class="text-xs text-gray-400 mt-2">/ km</p>
+                </div>
+             </div>
+        </section>
+
+        <section id="page-weather" class="hidden space-y-4">
+            <div class="content-card p-5 rounded-xl shadow-lg min-h-[300px] border-t-4 border-yellow-500 relative overflow-hidden">
+                <div class="watermark text-yellow-50"><i class="fas fa-cloud-sun"></i></div>
+                <h2 class="text-xl font-bold mb-4 text-race-dark flex items-center gap-2 relative z-10"><i class="fas fa-sun text-yellow-500"></i> 賽事天氣查詢 (5日)</h2>
+                <div class="flex gap-2 mb-4 relative z-10">
+                    <input type="text" id="weather-city" placeholder="輸入城市 (例如: Taipei)" class="w-full p-3 bg-gray-100 rounded-lg outline-none border border-gray-200 font-bold">
+                    <button onclick="getWeather()" class="bg-yellow-500 text-white px-4 rounded-lg font-bold">查詢</button>
+                </div>
+                <div class="grid grid-cols-4 text-center text-xs text-gray-500 font-bold mb-2 pb-2 border-b border-gray-200">
+                    <div class="col-span-1 text-left pl-2">日期</div>
+                    <div class="col-span-1">天氣</div>
+                    <div class="col-span-1">氣溫</div>
+                    <div class="col-span-1 text-right pr-2">濕度</div>
+                </div>
+                <div id="weather-result" class="space-y-1 relative z-10">
+                    </div>
+                <div class="text-center mt-2 relative z-10">
+                    <span class="text-[10px] text-gray-400">數據來源: Open-Meteo</span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <nav class="fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-sm border-t border-gray-200 pb-safe z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] font-body">
+        <div class="flex justify-around items-center h-16">
+            <button onclick="switchTab('calc')" id="tab-calc" class="flex flex-col items-center w-full h-full justify-center tab-active"><i class="fas fa-stopwatch text-xl mb-1"></i><span class="text-[10px] font-bold">配速</span></button>
+            <button onclick="switchTab('predict')" id="tab-predict" class="flex flex-col items-center w-full h-full justify-center tab-inactive"><i class="fas fa-chart-line text-xl mb-1"></i><span class="text-[10px] font-bold">預測</span></button>
+            <button onclick="switchTab('train')" id="tab-train" class="flex flex-col items-center w-full h-full justify-center tab-inactive"><i class="fas fa-dumbbell text-xl mb-1"></i><span class="text-[10px] font-bold">訓練</span></button>
+            <button onclick="switchTab('track')" id="tab-track" class="flex flex-col items-center w-full h-full justify-center tab-inactive"><i class="fas fa-road text-xl mb-1"></i><span class="text-[10px] font-bold">操場</span></button>
+            <button onclick="switchTab('weather')" id="tab-weather" class="flex flex-col items-center w-full h-full justify-center tab-inactive"><i class="fas fa-cloud-sun text-xl mb-1"></i><span class="text-[10px] font-bold">天氣</span></button>
+        </div>
+    </nav>
+
+    <script>
+        // VDOT Table (VDOT Score: [5K, 10K, Half Marathon, Full Marathon] in seconds)
+        const vdotData = {30: [1790, 3700, 8159, 16888], 31: [1746, 3610, 7962, 16490], 32: [1704, 3524, 7775, 16106], 33: [1664, 3442, 7596, 15736], 34: [1626, 3363, 7425, 15379], 35: [1589, 3287, 7261, 15035], 36: [1554, 3215, 7104, 14703], 37: [1520, 3145, 6953, 14383], 38: [1488, 3078, 6808, 14074], 39: [1456, 3013, 6668, 13776], 40: [1426, 2951, 6534, 13488], 41: [1397, 2891, 6404, 13210], 42: [1369, 2833, 6279, 12941], 43: [1342, 2777, 6158, 12681], 44: [1315, 2723, 6041, 12429], 45: [1290, 2670, 5928, 12186], 46: [1265, 2619, 5818, 11950], 47: [1241, 2570, 5712, 11721], 48: [1218, 2522, 5610, 11500], 49: [1195, 2476, 5510, 11285], 50: [1173, 2431, 5414, 11076], 51: [1152, 2387, 5320, 10874], 52: [1131, 2345, 5229, 10677], 53: [1111, 2303, 5140, 10486], 54: [1092, 2263, 5054, 10300], 55: [1073, 2224, 4970, 10119], 56: [1055, 2186, 4888, 9943], 57: [1037, 2149, 4809, 9771], 58: [1019, 2113, 4731, 9604], 59: [1002, 2078, 4656, 9441], 60: [985, 2043, 4582, 9282], 61: [969, 2010, 4510, 9127], 62: [953, 1977, 4440, 8976], 63: [938, 1945, 4371, 8828], 64: [923, 1914, 4304, 8684], 65: [908, 1883, 4238, 8543], 66: [894, 1853, 4174, 8406], 67: [880, 1824, 4111, 8271], 68: [866, 1796, 4050, 8140], 69: [853, 1768, 3990, 8011], 70: [840, 1741, 3931, 7885], 71: [827, 1714, 3873, 7762], 72: [814, 1688, 3817, 7641], 73: [802, 1662, 3761, 7523], 74: [790, 1637, 3707, 7407], 75: [778, 1612, 3654, 7294], 76: [767, 1588, 3602, 7183], 77: [755, 1565, 3551, 7074], 78: [744, 1541, 3500, 6967], 79: [733, 1519, 3451, 6863], 80: [723, 1496, 3403, 6760], 81: [712, 1475, 3355, 6660], 82: [702, 1453, 3308, 6561], 83: [692, 1432, 3262, 6464], 84: [682, 1412, 3217, 6369], 85: [672, 1391, 3172, 6276]};
+        const VDOT_PACE = { // VDOT: [R-Pace (400m), I-Pace/km] in seconds
+            30: [100, 270], 35: [91, 245], 40: [83, 224], 45: [77, 207], 50: [72, 193], 55: [67, 181], 60: [63, 171], 65: [60, 161], 70: [57, 153], 75: [54, 146], 80: [52, 139]
+        };
+        const TRACK_DISTANCES = [400, 408, 415, 423, 430, 438, 445, 453];
+
+        function initDropdowns() {
+            document.querySelectorAll('.pace-selector').forEach(sel => {
+                let isMin = sel.id.includes('min');
+                sel.innerHTML = '';
+                if(isMin) {
+                    for(let i=2; i<=12; i++) {
+                        let opt = new Option(i, i);
+                        if(i===5) opt.selected = true; 
+                        sel.add(opt);
+                    }
+                } else {
+                    for(let i=0; i<=59; i++) {
+                        let val = i < 10 ? '0'+i : i;
+                        let opt = new Option(val, i);
+                        if(i===0) opt.selected = true; 
+                        sel.add(opt);
+                    }
+                }
+            });
+            const selectors = ['pred-h', 'pred-m', 'pred-s', 'train-h', 'train-m', 'train-s'];
+            selectors.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.innerHTML = '';
+                if (id.includes('-h')) {
+                    for(let i=0; i<=5; i++) el.add(new Option(i, i));
+                } else {
+                    for(let i=0; i<=59; i++) el.add(new Option(i < 10 ? '0'+i : i, i));
+                }
+            });
+            document.getElementById('pred-h').value = 0; document.getElementById('pred-m').value = 50; document.getElementById('pred-s').value = 0;
+            document.getElementById('train-h').value = 0; document.getElementById('train-m').value = 25; document.getElementById('train-s').value = 0; // 5K default 25:00
+        }
+
+        function getPaceSeconds(prefix) {
+            const pm = parseInt(document.getElementById(`${prefix}-min`)?.value) || 0;
+            const ps = parseInt(document.getElementById(`${prefix}-sec`)?.value) || 0;
+            return pm * 60 + ps;
+        }
+
+        function fmtTime(s) {
+            if(isNaN(s) || s <= 0) return "--:--:--";
+            const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.round(s%60);
+            return `${h>0?h+':':''}${m<10&&h>0?'0'+m:m}:${sec<10?'0'+sec:sec}`;
+        }
+        function fmtPace(s) {
+            const m = Math.floor(s/60), sec = Math.round(s%60);
+            return `${m}:${sec<10?'0'+sec:sec}`;
+        }
+        function fmtSec(s) {
+            return s.toFixed(0) + "s";
+        }
+
+        function findBestVDOT(totalInputSec, distType) {
+            const distIndexMap = { '5k': 0, '10k': 1, 'hm': 2, 'fm': 3 };
+            const inputDistIdx = distIndexMap[distType];
+            let bestVdot = null;
+            let minDiff = Infinity;
+            
+            for(const vdot in vdotData) {
+                const timeForDist = vdotData[vdot][inputDistIdx];
+                const diff = Math.abs(totalInputSec - timeForDist);
+                if(diff < minDiff) { minDiff = diff; bestVdot = vdot; }
+            }
+            return bestVdot;
+        }
+        
+        // --- VDOT Training Pace Calculation ---
+        function calcVDOTTrainingPace() {
+            const distType = document.getElementById('train-dist-type').value;
+            const h = parseInt(document.getElementById('train-h').value) || 0;
+            const m = parseInt(document.getElementById('train-m').value) || 0;
+            const s = parseInt(document.getElementById('train-s').value) || 0;
+            const totalInputSec = h*3600 + m*60 + s;
+            if(totalInputSec <= 0) return alert("請輸入有效的預計完成時間");
+
+            const vdotScore = findBestVDOT(totalInputSec, distType);
+            if (!vdotScore) return alert("無法計算 VDOT，輸入成績超出範圍");
+
+            // Find closest VDOT in VDOT_PACE table
+            let bestVDOT_R_I = null;
+            let minVdotDiff = Infinity;
+            
+            const vdotKeys = Object.keys(VDOT_PACE).map(Number);
+            const targetVdot = parseInt(vdotScore);
+
+            for (const vdot of vdotKeys) {
+                const diff = Math.abs(targetVdot - vdot);
+                if (diff < minVdotDiff) {
+                    minVdotDiff = diff;
+                    bestVDOT_R_I = VDOT_PACE[vdot];
+                } else if (diff === minVdotDiff && vdot < targetVdot) {
+                    bestVDOT_R_I = VDOT_PACE[vdot];
+                }
+            }
+            
+            if (!bestVDOT_R_I) return alert("無法找到對應的訓練配速數據");
+
+            const [rPace400s, iPaceKmS] = bestVDOT_R_I;
+            const iPace800s = iPaceKmS * 0.8; 
+            const iPace1000s = iPaceKmS * 1.0; 
+
+            document.getElementById('train-result').classList.remove('hidden');
+            document.getElementById('vdot-train-score').innerText = `VDOT: ${vdotScore} (近似值)`;
+
+            const tbody = document.getElementById('vdot-train-table');
+            tbody.innerHTML = '';
+
+            const data = [
+                { dist: '400m', rPace: rPace400s, iPace: rPace400s },
+                { dist: '800m', rPace: rPace400s * 2, iPace: iPace800s },
+                { dist: '1000m', rPace: rPace400s * 2.5, iPace: iPace1000s }
+            ];
+
+            data.forEach(item => {
+                const isR = item.dist === '400m';
+                const rSecs = item.rPace;
+                const iSecs = item.iPace;
+                let rPaceStr, iPaceStr;
+                
+                if (item.dist === '400m') {
+                    rPaceStr = `<span class="text-lg num-font">${fmtSec(rSecs)}</span>`;
+                    iPaceStr = `<span class="text-sm text-gray-500">I-Pace / km: ${fmtPace(iPaceKmS)}</span>`;
+                } else {
+                    rPaceStr = `<span class="text-lg num-font">${fmtSec(rSecs)}</span>`;
+                    iPaceStr = `<span class="text-lg num-font">${fmtSec(iSecs)}</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = "bg-white/80 border-b border-gray-100 hover:bg-gray-50/90 transition";
+                tr.innerHTML = `
+                    <th scope="row" class="px-3 py-3 font-bold text-center text-race-dark">${item.dist}</th>
+                    <td class="px-3 py-3 text-center text-race-red font-bold">${rPaceStr}</td>
+                    <td class="px-3 py-3 text-center text-green-700 font-bold">${iPaceStr}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            tbody.innerHTML += `
+                <tr class="bg-gray-100/80 text-xs text-gray-600">
+                    <td colspan="3" class="p-2 text-left">
+                        <p class="font-bold text-race-red">R-Pace (Repetition):</p>
+                        <p>極短距離快跑配速 (400m)，速度最快，恢復時間最長。</p>
+                        <p class="font-bold text-green-700 mt-1">I-Pace (Interval):</p>
+                        <p>長間歇配速 (800m, 1000m)，強度略低於 R-Pace，有助提升最大攝氧量。</p>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // --- Core Calculations ---
+        function calcGeneralPace() {
+            const s = getPaceSeconds('pace');
+            document.getElementById('time-half').innerText = fmtTime(s * 21.0975);
+            document.getElementById('time-full').innerText = fmtTime(s * 42.195);
+        }
+
+        function calcStrat() {
+            const dist = parseFloat(document.getElementById('strat-dist-type').value);
+            const d1 = parseFloat(document.getElementById('strat-dist-1').value) || 0;
+            const s1 = getPaceSeconds('strat-p1'), s2 = getPaceSeconds('strat-p2');
+            if(s1 && s2) document.getElementById('strat-total-time').innerText = fmtTime(d1*s1 + (dist-d1)*s2);
+        }
+        function updateStratRem() {
+             const dist = parseFloat(document.getElementById('strat-dist-type').value);
+             const d1 = parseFloat(document.getElementById('strat-dist-1').value) || 0;
+             document.getElementById('strat-dist-rem').innerText = (dist - d1).toFixed(3);
+             calcStrat();
+        }
+
+        // --- VDOT Prediction ---
+        function calcVDOTPrediction() { 
+            const distType = document.getElementById('pred-dist-type').value;
+            const h = parseInt(document.getElementById('pred-h').value) || 0;
+            const m = parseInt(document.getElementById('pred-m').value) || 0;
+            const s = parseInt(document.getElementById('pred-s').value) || 0;
+            const totalInputSec = h*3600 + m*60 + s;
+            if(totalInputSec <= 0) return alert("請輸入有效的完成時間");
+            
+            const bestVdot = findBestVDOT(totalInputSec, distType);
+            
+            if(!bestVdot) return alert("無法計算，輸入成績超出範圍");
+            
+            document.getElementById('pred-result').classList.remove('hidden');
+            document.getElementById('vdot-score').innerText = `VDOT: ${bestVdot}`;
+            const resultTimes = vdotData[bestVdot];
+            const dists = ['5k', '10k', 'hm', 'fm'];
+            const distKm = [5, 10, 21.0975, 42.195];
+            
+            dists.forEach((d, idx) => {
+                const timeSec = resultTimes[idx];
+                document.querySelector(`#pred-row-${d} .pred-time`).innerText = fmtTime(timeSec);
+                document.querySelector(`#pred-row-${d} .pred-pace`).innerText = `@${fmtPace(timeSec / distKm[idx])}`;
+            });
+        }
+
+        // --- TRACK CALCULATOR ---
+        function calcTrackLaps() {
+            const paceSec = getPaceSeconds('track-pace');
+            let tbody = document.getElementById('track-table-body');
+            tbody.innerHTML = '';
+            TRACK_DISTANCES.forEach((dist, index) => {
+                const lane = index + 1;
+                let lapTimeStr = "--";
+                if (paceSec > 0) {
+                    let lapTime = dist * (paceSec / 1000);
+                    lapTimeStr = lapTime.toFixed(1) + "s"; 
+                }
+                let isLane1 = lane === 1;
+                let tr = document.createElement('tr');
+                tr.className = isLane1 ? "bg-red-50/80 border-b border-red-100" : "bg-white/50 border-b border-gray-100 hover:bg-gray-50/90";
+                tr.innerHTML = `
+                    <th scope="row" class="px-3 py-2 font-bold text-center ${isLane1 ? 'text-race-red text-lg' : 'text-gray-700'}">${lane}</th>
+                    <td class="px-3 py-2 text-center text-gray-800 font-bold">${dist}</td>
+                    <td class="px-3 py-2 text-right font-bold num-font text-lg ${isLane1 ? 'text-race-red' : 'text-gray-800'}">${lapTimeStr}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function calcTrackSecToPace() {
+            let sec = parseFloat(document.getElementById('track-lap-sec').value);
+            if(sec > 0) document.getElementById('track-res-pace').innerText = fmtPace(sec * 2.5);
+        }
+
+        // --- Weather ---
+        async function getWeather() { 
+            const city = document.getElementById('weather-city').value;
+            const resDiv = document.getElementById('weather-result');
+            if(!city) return;
+            resDiv.innerHTML = '<p class="text-center p-4 text-gray-300"><i class="fas fa-spinner fa-spin"></i> 讀取氣象資料...</p>';
+            try {
+                const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`);
+                const geoData = await geoRes.json();
+                if(!geoData.results) throw new Error('找不到該城市');
+                const { latitude, longitude, name, country } = geoData.results[0];
+
+                const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weathercode,temperature_2m_max,temperature_2m_min&hourly=relative_humidity_2m&timezone=auto&forecast_days=5`);
+                const wData = await wRes.json();
+                
+                let html = `<div class="font-bold text-gray-700 mb-2 pl-2"><i class="fas fa-map-marker-alt text-red-500"></i> ${name}, ${country}</div>`;
+                const wCodes = { 0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',51:'🌧️',61:'🌧️',80:'🌦️',95:'⛈️' };
+                const days = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+
+                for(let i=0; i<5; i++) {
+                    const dateStr = wData.daily.time[i]; 
+                    const dateObj = new Date(dateStr + "T00:00:00");
+                    const month = dateObj.getMonth() + 1;
+                    const date = dateObj.getDate();
+                    const dayName = days[dateObj.getDay()];
+                    
+                    let sumHumid = 0;
+                    for(let h=0; h<24; h++) { sumHumid += wData.hourly.relative_humidity_2m[i*24 + h]; }
+                    const avgHumid = Math.round(sumHumid / 24);
+
+                    html += `
+                    <div class="weather-row grid grid-cols-4 items-center p-2 bg-gray-50/80 rounded mb-1 border-l-4 ${i===0?'border-race-red bg-red-50/80':'border-gray-200'}">
+                        <div class="col-span-1 text-left">
+                            <div class="text-sm font-bold text-gray-800">${month}/${date}</div>
+                            <div class="text-[10px] text-gray-500">${dayName}</div>
+                        </div>
+                        <div class="col-span-1 text-center text-xl">${wCodes[wData.daily.weathercode[i]]||'🌥️'}</div>
+                        <div class="col-span-1 text-center font-bold text-gray-700 text-sm">
+                            ${Math.round(wData.daily.temperature_2m_max[i])}° <span class="text-gray-400 text-[10px]">/ ${Math.round(wData.daily.temperature_2m_min[i])}°</span>
+                        </div>
+                        <div class="col-span-1 text-right text-sm font-bold text-blue-600">
+                            <i class="fas fa-tint text-[10px]"></i> ${avgHumid}%
+                        </div>
+                     </div>`;
+                }
+                resDiv.innerHTML = html;
+            } catch(e) { 
+                console.error(e);
+                resDiv.innerHTML = `<p class="text-red-500 text-center">查詢失敗，請確認城市名稱</p>`; 
+            }
+        }
+
+        // --- Init & Switch ---
+        function switchTab(id) {
+            ['calc','predict','train','track','weather'].forEach(t => {
+                document.getElementById(`page-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).classList.replace('tab-active','tab-inactive');
+            });
+            document.getElementById(`page-${id}`).classList.remove('hidden');
+            document.getElementById(`tab-${id}`).classList.replace('tab-inactive','tab-active');
+        }
+        function switchTrackMode(mode) {
+             const isP2S = mode === 'paceToSec';
+             document.getElementById('track-p2s-content').classList.toggle('hidden', !isP2S);
+             document.getElementById('track-s2p-content').classList.toggle('hidden', isP2S);
+             document.getElementById('btn-track-p2s').className = isP2S ? "flex-1 py-2 text-sm font-bold rounded-md bg-race-red text-white transition" : "flex-1 py-2 text-sm font-bold rounded-md text-gray-500 transition";
+             document.getElementById('btn-track-s2p').className = !isP2S ? "flex-1 py-2 text-sm font-bold rounded-md bg-race-red text-white transition" : "flex-1 py-2 text-sm font-bold rounded-md text-gray-500 transition";
+        }
+        function switchMode(mode) {
+             const isGen = mode === 'general';
+             document.getElementById('content-general').classList.toggle('hidden', !isGen);
+             document.getElementById('content-strategy').classList.toggle('hidden', isGen);
+             document.getElementById('btn-general').className = isGen ? "flex-1 py-2 text-sm font-bold rounded-md bg-race-red text-white transition" : "flex-1 py-2 text-sm font-bold rounded-md text-gray-500 transition";
+             document.getElementById('btn-strategy').className = !isGen ? "flex-1 py-2 text-sm font-bold rounded-md bg-race-red text-white transition" : "flex-1 py-2 text-sm font-bold rounded-md text-gray-500 transition";
+             if (!isGen) updateStratRem();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initDropdowns();
+            // Attach listeners
+            ['pace-min','pace-sec'].forEach(id => document.getElementById(id).addEventListener('change', calcGeneralPace));
+            ['strat-dist-type','strat-dist-1','strat-p1-min','strat-p1-sec','strat-p2-min','strat-p2-sec'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.addEventListener(el.tagName==='SELECT'?'change':'input', id.includes('dist')?updateStratRem:calcStrat);
+            });
+            ['track-pace-min','track-pace-sec'].forEach(id => document.getElementById(id).addEventListener('change', calcTrackLaps));
+
+            // Initial calculations
+            calcGeneralPace();
+            calcTrackLaps(); 
+            updateStratRem();
+        });
+    </script>
+</body>
+</html>
